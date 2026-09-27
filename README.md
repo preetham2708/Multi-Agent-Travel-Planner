@@ -1,6 +1,6 @@
 # ✈️ TripMate AI — Multi-Agent Travel Planner (LangGraph + MCP + Groq)
 
-TripMate AI is a multi-agent travel-planning assistant. You describe a trip in plain English, for example *"Plan a 7 day Japan trip from Bangladesh including flights, hotels and sightseeing under 2 lakhs"*, and a LangGraph pipeline of specialist agents researches flights, hotels and weather, checks the plan against your budget, drafts an itinerary, and **pauses for your approval** before producing the final plan.
+TripMate AI is a multi-agent travel-planning assistant. You describe a trip in plain English, for example _"Plan a 7 day Japan trip from Bangladesh including flights, hotels and sightseeing under 2 lakhs"_, and a LangGraph pipeline of specialist agents researches flights, hotels and weather, checks the plan against your budget, drafts an itinerary, and **pauses for your approval** before producing the final plan.
 
 It combines a **Supervisor** that routes work, an **input guardrail** that filters requests, **MCP-based tools** for live data, and a **human-in-the-loop (HITL)** review step, all served through a FastAPI backend with a simple web UI.
 
@@ -14,15 +14,15 @@ It combines a **Supervisor** that routes work, an **input guardrail** that filte
 
 ## Tech stack
 
-| Layer | Technology |
-| --- | --- |
-| Agent orchestration | LangGraph |
-| LLM | Groq, model `openai/gpt-oss-20b` (via `langchain_groq`) |
-| Tools | MCP: Tavily (hotels), AviationStack (flights), custom weather MCP server |
-| Backend API | FastAPI |
-| Memory / checkpointing | PostgreSQL (`PostgresSaver`) |
-| Frontend | HTML, CSS, vanilla JavaScript (Jinja2 template) |
-| Dependency management | uv (`pyproject.toml`, `uv.lock`) or pip (`requirements.txt`) |
+| Layer                  | Technology                                                               |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Agent orchestration    | LangGraph                                                                |
+| LLM                    | Groq, model `openai/gpt-oss-20b` (via `langchain_groq`)                  |
+| Tools                  | MCP: Tavily (hotels), AviationStack (flights), custom weather MCP server |
+| Backend API            | FastAPI                                                                  |
+| Memory / checkpointing | SQLite (`SqliteSaver`)                                                   |
+| Frontend               | HTML, CSS, vanilla JavaScript (Jinja2 template)                          |
+| Dependency management  | uv (`pyproject.toml`, `uv.lock`) or pip (`requirements.txt`)             |
 
 ## How it works
 
@@ -152,12 +152,12 @@ python custom_weather_mcp_server.py
 
 ## API endpoints
 
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/` | Serves the web UI |
-| `POST` | `/api/travel` | Starts a new travel request; returns the draft itinerary and pauses for approval, or a guardrail message |
-| `POST` | `/api/travel/approve` | Resumes a paused thread with your approval or revision feedback |
-| `GET` | `/health` | Health check |
+| Method | Route                 | Description                                                                                              |
+| ------ | --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/`                   | Serves the web UI                                                                                        |
+| `POST` | `/api/travel`         | Starts a new travel request; returns the draft itinerary and pauses for approval, or a guardrail message |
+| `POST` | `/api/travel/approve` | Resumes a paused thread with your approval or revision feedback                                          |
+| `GET`  | `/health`             | Health check                                                                                             |
 
 **`POST /api/travel`**
 
@@ -208,3 +208,28 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Acknowledgements
 
 Built with [LangGraph](https://github.com/langchain-ai/langgraph), [MCP](https://modelcontextprotocol.io/), [Groq](https://groq.com/), [FastAPI](https://fastapi.tiangolo.com/), [Tavily](https://tavily.com/) and [AviationStack](https://aviationstack.com/).
+
+## My Contributions
+
+This project began from an open-source reference implementation and was extended with the
+following changes:
+
+- **Migrated persistence from PostgreSQL to SQLite** — replaced `psycopg` + `PostgresSaver`
+  with `sqlite3` + `SqliteSaver`, removing the external database dependency entirely and
+  simplifying local and demo deployment to a single file (`checkpoints.sqlite`).
+- **Added budget-aware alternative suggestions** — enhanced the Budget Agent with keyword-based
+  over-budget detection that triggers a second, targeted LLM call generating three concrete
+  alternatives (shorter trip duration, lower-cost accommodation tier, cheaper destination),
+  surfaced directly in the final itinerary.
+- **Integrated LangSmith observability** — added end-to-end tracing of every agent and tool
+  call for debugging and performance monitoring.
+- **Containerized with Docker Compose** — added a single-service `docker-compose.yml` for
+  reproducible local setup without a separate database container.
+
+## Original Project Attribution
+
+The core multi-agent architecture (Supervisor routing, specialized Flight/Hotel/Weather/Budget
+agents, MCP tool integration, guardrails, and human-in-the-loop approval) is based on the
+open-source project [Multi-Agent-Travel-Planner](https://github.com/riteshsal/Multi-Agent-Travel-Planner)
+by [riteshsal](https://github.com/riteshsal), licensed under the MIT License. This repository
+builds on that foundation with the modifications described above.

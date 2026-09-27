@@ -11,10 +11,9 @@ import operator
 import uuid
 import asyncio
 import json
-import psycopg
-from psycopg.rows import dict_row
+import sqlite3
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command, interrupt
 from langchain_core.messages import (
     AnyMessage,
@@ -33,20 +32,7 @@ from mcp_client import (
 )
 
 
-def get_database_url():
-    database_url = os.getenv("DATABASE_URL")
 
-    if not database_url:
-        raise ValueError(
-            "DATABASE_URL is missing. "
-            "Please add your Render PostgreSQL External Database URL to .env"
-        )
-
-    if "sslmode=" not in database_url:
-        separator = "&" if "?" in database_url else "?"
-        database_url = f"{database_url}{separator}sslmode=require"
-
-    return database_url
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -89,6 +75,7 @@ class TravelState(TypedDict, total=False):
 
     # New budget + HITL state
     budget_results: str
+    budget_alternatives: str
     approval_request: str
     approved: bool
     human_feedback: str
@@ -524,10 +511,44 @@ If exact live prices are unavailable, clearly label estimates as approximate.
         ]
     )
 
+    budget_text = response.content
+    alternatives_text = ""
+    llm_call_count = 1
+
+    # Detect budget risk using keyword rules, then generate structured alternatives
+    risk_keywords = ["not feasible", "exceeds budget", "over budget", "not realistic", "insufficient budget"]
+    is_over_budget = any(keyword in budget_text.lower() for keyword in risk_keywords)
+
+    if is_over_budget:
+        alt_prompt = f"""
+The user's trip may exceed their budget. Suggest exactly 3 concrete, practical alternatives to
+bring the trip within budget. Format each as a short bullet point.
+
+Original Query:
+{state['user_query']}
+
+Budget Assessment:
+{_truncate(budget_text)}
+
+Give alternatives covering:
+1. Reducing trip duration
+2. Choosing a lower-cost accommodation tier
+3. A cheaper alternative destination or dates
+"""
+        alt_response = llm.invoke(
+            [
+                SystemMessage(content="You suggest concrete, budget-friendly trip alternatives."),
+                HumanMessage(content=alt_prompt),
+            ]
+        )
+        alternatives_text = alt_response.content
+        llm_call_count = 2
+
     return {
-        "budget_results": response.content,
+        "budget_results": budget_text,
+        "budget_alternatives": alternatives_text,
         "messages": [AIMessage(content="Budget assessment generated.")],
-        "llm_calls": 1,
+        "llm_calls": llm_call_count,
     }
 
 
@@ -556,6 +577,9 @@ Weather Results:
 
 Budget Results:
 {_truncate(state.get('budget_results', ''))}
+
+Budget Alternatives (if any):
+{_truncate(state.get('budget_alternatives', 'None needed - trip is within budget.'))}
 
 Make the itinerary practical, budget-aware, and easy to follow.
 Create a clear draft that is ready for human review.
@@ -764,19 +788,12 @@ graph.add_edge("guardrail_blocked", END)
 
 
 # =========================
-# PostgreSQL Checkpointer - original persistence kept
+# SQLite Checkpointer - migrated from PostgreSQL
 # =========================
 
-DATABASE_URL = get_database_url()
+_conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
 
-_conn = psycopg.connect(
-    DATABASE_URL,
-    autocommit=True,
-    row_factory=dict_row,
-)
-
-checkpointer = PostgresSaver(_conn)
-checkpointer.setup()
+checkpointer = SqliteSaver(_conn)
 
 travel_graph = graph.compile(checkpointer=checkpointer)
 
@@ -824,6 +841,7 @@ def _serialize_result(
         "hotel_results": result.get("hotel_results", ""),
         "weather_results": result.get("weather_results", ""),
         "budget_results": result.get("budget_results", ""),
+        "budget_alternatives": result.get("budget_alternatives", ""),
         "itinerary": (
             interrupt_payload.get("draft_itinerary", "")
             if interrupt_payload

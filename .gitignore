@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Local SQLite checkpoint database (generated at runtime)
+checkpoints.sqlite
+checkpoints.sqlite-shm
+checkpoints.sqlite-wal
