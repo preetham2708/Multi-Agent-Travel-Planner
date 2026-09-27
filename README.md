@@ -226,6 +226,26 @@ following changes:
 - **Containerized with Docker Compose** — added a single-service `docker-compose.yml` for
   reproducible local setup without a separate database container.
 
+### Architecture highlights
+
+- **Fan-out/fan-in parallel execution** — Flight, Hotel, and Weather agents run concurrently
+  since they have no interdependencies, then join before Budget and Itinerary agents process
+  the combined results sequentially. This reduces end-to-end latency versus a fully sequential
+  pipeline.
+- **Fail-open guardrail** — the input guardrail defaults to allowing a request when the
+  validation call itself fails, prioritizing availability over strict enforcement during
+  transient LLM/parsing errors.
+
+### Architecture highlights
+
+- **Fan-out/fan-in parallel execution** — Flight, Hotel, and Weather agents run concurrently
+  since they have no interdependencies, then join before Budget and Itinerary agents process
+  the combined results sequentially. This reduces end-to-end latency versus a fully sequential
+  pipeline.
+- **Fail-open guardrail** — the input guardrail defaults to allowing a request when the
+  validation call itself fails, prioritizing availability over strict enforcement during
+  transient LLM/parsing errors.
+
 ## Original Project Attribution
 
 The core multi-agent architecture (Supervisor routing, specialized Flight/Hotel/Weather/Budget
